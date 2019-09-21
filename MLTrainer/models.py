@@ -2,7 +2,7 @@ from sklearn import ensemble, linear_model, naive_bayes, neighbors, svm, tree, m
 import numpy as np, pandas as pd, logging, os
 
 class MLTrainer:
-    def __init__(self, ensemble=True, linear=True, naive_bayes=False, neighbors=True, svm=True, decision_tree=True):
+    def __init__(self, ensemble=True, linear=True, naive_bayes=False, neighbors=True, svm=True, decision_tree=True, seed=100):
         """
         ensemble: bool
             True if want ensemble models
@@ -37,7 +37,6 @@ class MLTrainer:
         """
         self.init_all_models()
         for model in self.models:
-            print(model)
             model.fit(X, Y)
 
     def evaluate(self, test_X, test_Y, idx_label_dic=None):
@@ -157,7 +156,7 @@ class MLTrainer:
             raise Exception("No Models Selected, Look at the Parameters of ___init__")
         
     def init_ensemble(self):
-        all_models = [ensemble.AdaBoostClassifier(), ensemble.BaggingClassifier(), ensemble.BaggingClassifier(), ensemble.ExtraTreesClassifier(),
+        all_models = [ensemble.AdaBoostClassifier(), ensemble.BaggingClassifier(), ensemble.ExtraTreesClassifier(),
                         ensemble.GradientBoostingClassifier(), ensemble.RandomForestClassifier()]
         self.models.extend(all_models)
         
