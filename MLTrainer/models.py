@@ -26,7 +26,7 @@ class MLTrainer:
         self.svm = svm
         self.decision_trees = decision_tree
 
-    def fit(self, X, Y):
+    def fit(self, X, Y, gridsearchcv=False):
         """
         X: numpy array
             shape is (n_samples, n_features)
@@ -165,6 +165,10 @@ class MLTrainer:
         self.models.extend(all_models)
 
     def init_naive_bayes(self):
+        """
+        MultinomialNB works with occurrence counts
+        BernoulliNB is designed for binary/boolean features
+        """
         all_models = [naive_bayes.BernoulliNB(), naive_bayes.GaussianNB(), naive_bayes.MultinomialNB(), naive_bayes.ComplementNB()]
         self.models.extend(all_models)
 
@@ -173,7 +177,7 @@ class MLTrainer:
         self.models.extend(all_models)
 
     def init_svm(self):
-        all_models = [svm.NuSVC(probability=True), svm.SVC(probability=True)]
+        all_models = [svm.NuSVC(probability=True), svm.SVC(probability=True), svm.LinearSVC()]
         self.models.extend(all_models)
 
     def init_decision_tree(self):
