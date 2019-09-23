@@ -119,6 +119,6 @@ classf_grids = {
     "linear": linear_grids,
     "nb": nb_grids,
     "neighbors": neighbors_grids,
-    "svm_grids": svm_grids,
+    "svm": svm_grids,
     "tree": tree_grids
 }

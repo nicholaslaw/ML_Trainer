@@ -1,5 +1,5 @@
 from sklearn import ensemble, linear_model, naive_bayes, neighbors, svm, tree, model_selection, metrics
-import numpy as np, pandas as pd, logging, os
+import numpy as np, pandas as pd, logging, os, joblib
 
 class MLTrainer:
     def __init__(self, ensemble=True, linear=True, naive_bayes=False, neighbors=True, svm=True, decision_tree=True, seed=100):
@@ -25,19 +25,32 @@ class MLTrainer:
         self.neighbors = neighbors
         self.svm = svm
         self.decision_trees = decision_tree
+        self.model_keys = dict({})
 
-    def fit(self, X, Y, gridsearchcv=False):
+    def fit(self, X, Y, n_jobs=1, gridsearchcv=False, param_grids={}):
         """
         X: numpy array
             shape is (n_samples, n_features)
         Y: numpy array
             shape is (n_samples, 1)
+        njobs: int
+            sklearn parallel
+        param_grids: nested dictionary
+            contains several parameter grids
         
         Train all selected models
         """
         self.init_all_models()
-        for model in self.models:
-            model.fit(X, Y)
+        counter = 0
+        for model_name, model in zip(list(self.model_keys.keys()) ,self.models):
+            if gridsearchcv:
+                mod = model_selection.GridSearchCV(model, param_grids[self.model_keys[model_name]][model_name], n_jobs=n_jobs)
+            else:
+                mod = model
+            mod.fit(X, Y)
+            self.models[counter] = mod
+            joblib.dump(mod, open(model_name + ".p", "wb"))
+            counter += 1
 
     def evaluate(self, test_X, test_Y, idx_label_dic=None):
         """
@@ -55,7 +68,7 @@ class MLTrainer:
         for idx, model in enumerate(self.models):
             self.evaluate_model(model, test_X, test_Y, "./folder_" + str(idx) + "/")
 
-    def evaluate_model(self, model, test_X, test_Y, folder, class_report="classf_report.csv", con_mat="confusion_matrix.csv", pred_proba="predictions_proba.csv"):
+    def evaluate_model(self, model, test_X, test_Y, folder="", class_report="classf_report.csv", con_mat="confusion_matrix.csv", pred_proba="predictions_proba.csv"):
         """
         model: Sklearn model object
         test_X: numpy array
@@ -159,10 +172,16 @@ class MLTrainer:
         all_models = [ensemble.AdaBoostClassifier(), ensemble.BaggingClassifier(), ensemble.ExtraTreesClassifier(),
                         ensemble.GradientBoostingClassifier(), ensemble.RandomForestClassifier()]
         self.models.extend(all_models)
+        models = ["adaboost", "bagging", "extratrees", "gradientboosting", 'randomforest']
+        for mod in models:
+            self.model_keys[mod] = "ensemble"
         
     def init_linear(self):
         all_models = [linear_model.LogisticRegression()]
         self.models.extend(all_models)
+        models = ["logreg"]
+        for mod in models:
+            self.model_keys[mod] = "linear"
 
     def init_naive_bayes(self):
         """
@@ -171,15 +190,27 @@ class MLTrainer:
         """
         all_models = [naive_bayes.BernoulliNB(), naive_bayes.GaussianNB(), naive_bayes.MultinomialNB(), naive_bayes.ComplementNB()]
         self.models.extend(all_models)
+        models = ["bernoulli", "gaussian", "multinomial", "complement"]
+        for mod in models:
+            self.model_keys[mod] = "nb"
 
     def init_neighbors(self):
         all_models = [neighbors.KNeighborsClassifier()]
         self.models.extend(all_models)
+        models = ["knn"]
+        for mod in models:
+            self.model_keys[mod] = "neighbors"
 
     def init_svm(self):
         all_models = [svm.NuSVC(probability=True), svm.SVC(probability=True), svm.LinearSVC()]
         self.models.extend(all_models)
+        models = ["nu", "svc", "linearsvc"]
+        for mod in models:
+            self.model_keys[mod] = "svm"
 
     def init_decision_tree(self):
         all_models = [tree.DecisionTreeClassifier(), tree.ExtraTreeClassifier()]
         self.models.extend(all_models)
+        models = ["decision", "extra"]
+        for mod in models:
+            self.model_keys[mod] = "tree"
