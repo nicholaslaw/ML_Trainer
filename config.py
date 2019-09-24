@@ -92,14 +92,6 @@ svm_grids = {
         "probability": [True],
         "tol": [1e-3, 1e-4, 1e-5]
     },
-    "linearsvc": {
-        "penalty": ["l1", "l2"],
-        "loss": ["hinge", "squared_hinge"],
-        "dual": [True, False],
-        "tol": [1e-3, 1e-4, 1e-5],
-        "C": [0.8, 0.9, 1.0],
-        "multi_class": ["ovr", "crammer_singer"]
-    }
 }
 
 tree_grids = {

@@ -42,14 +42,19 @@ class MLTrainer:
         """
         self.init_all_models()
         counter = 0
-        for model_name, model in zip(list(self.model_keys.keys()) ,self.models):
+        for model_name, model in zip(list(self.model_keys.keys()),self.models):
             if gridsearchcv:
                 mod = model_selection.GridSearchCV(model, param_grids[self.model_keys[model_name]][model_name], n_jobs=n_jobs)
             else:
                 mod = model
+                if hasattr(mod, "n_jobs"):
+                    mod.n_jobs = n_jobs
             mod.fit(X, Y)
             self.models[counter] = mod
-            joblib.dump(mod, open(model_name + ".p", "wb"))
+            folder = "./" + model_name + "/"
+            if not os.path.exists(folder):
+                os.makedirs(folder)
+            joblib.dump(mod, open(folder + model_name + ".p", "wb"))
             counter += 1
 
     def evaluate(self, test_X, test_Y, idx_label_dic=None):
@@ -65,8 +70,8 @@ class MLTrainer:
             idx_label_dic = {idx: str(idx) for idx in range(self.models[0].n_classes_)}
         self.idx_label_dic = idx_label_dic
         del idx_label_dic
-        for idx, model in enumerate(self.models):
-            self.evaluate_model(model, test_X, test_Y, "./folder_" + str(idx) + "/")
+        for model_name, model in zip(list(self.model_keys.keys()) ,self.models):
+            self.evaluate_model(model, test_X, test_Y, "./" + model_name + "/")
 
     def evaluate_model(self, model, test_X, test_Y, folder="", class_report="classf_report.csv", con_mat="confusion_matrix.csv", pred_proba="predictions_proba.csv"):
         """
@@ -86,8 +91,6 @@ class MLTrainer:
 
         Obtain evaluation metrics
         """
-        if not os.path.exists(folder):
-            os.makedirs(folder)
         predictions = model.predict(test_X)
         predictions_proba = model.predict_proba(test_X)
 
@@ -202,9 +205,9 @@ class MLTrainer:
             self.model_keys[mod] = "neighbors"
 
     def init_svm(self):
-        all_models = [svm.NuSVC(probability=True), svm.SVC(probability=True), svm.LinearSVC()]
+        all_models = [svm.NuSVC(probability=True), svm.SVC(probability=True)]
         self.models.extend(all_models)
-        models = ["nu", "svc", "linearsvc"]
+        models = ["nu", "svc"]
         for mod in models:
             self.model_keys[mod] = "svm"
 
