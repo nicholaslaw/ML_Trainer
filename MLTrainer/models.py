@@ -1,8 +1,11 @@
 from sklearn import ensemble, linear_model, naive_bayes, neighbors, svm, tree, model_selection, metrics
 import numpy as np, pandas as pd, logging, os, joblib
+from .model_params import classf_grids
+import warnings
+from typing import Union
 
 class MLTrainer:
-    def __init__(self, ensemble=True, linear=True, naive_bayes=False, neighbors=True, svm=True, decision_tree=True, seed=100):
+    def __init__(self, ensemble: bool=True, linear: bool=True, naive_bayes: bool=True, neighbors: bool=True, svm: bool=True, decision_tree: bool=True, seed: int=100) -> None:
         """
         ensemble: bool
             True if want ensemble models
@@ -18,7 +21,8 @@ class MLTrainer:
             True if want decision tree models
         NOTE: Need fix naive bayes and folder names
         """
-        self.models = []
+        self.models = [] # list containing names of models, i.e. strings
+        self.n_classes = None # Number of classes
         self.ensemble = ensemble
         self.linear = linear
         self.naive_bayes = naive_bayes
@@ -27,37 +31,72 @@ class MLTrainer:
         self.decision_trees = decision_tree
         self.model_keys = dict({})
 
-    def fit(self, X, Y, n_jobs=1, gridsearchcv=False, param_grids={}):
+    def get_models_scores(self, X: Union[tuple, list, np.ndarray], Y: Union[tuple, list, np.ndarray], n_folds: int=5, scoring: str="accuracy", n_jobs: int=-1, gridsearchcv: bool=False, param_grids: dict={}) -> None:
         """
         X: numpy array
             shape is (n_samples, n_features)
         Y: numpy array
             shape is (n_samples, 1)
+        n_folds: int
+            number of cross validation folds
         njobs: int
             sklearn parallel
+        scoring: str
+            string indicating scoring metric, reference can be found at https://scikit-learn.org/stable/modules/model_evaluation.html#scoring-parameter
+        gridsearchcv: bool
+            True if want parameter search with gridsearch
         param_grids: nested dictionary
             contains several parameter grids
         
-        Train all selected models
+        Train all selected models with cross validation 
         """
+        self.n_classes = len(np.unique(Y))
         self.init_all_models()
+        cv_metric = "mean_cv_score_"+scoring
+        result_df = {"model": [], "parameters": [], cv_metric: []}
+
+        if gridsearchcv:
+            param_grids = classf_grids
+
         counter = 0
         for model_name, model in zip(list(self.model_keys.keys()),self.models):
+
             if gridsearchcv:
                 mod = model_selection.GridSearchCV(model, param_grids[self.model_keys[model_name]][model_name], n_jobs=n_jobs)
             else:
                 mod = model
                 if hasattr(mod, "n_jobs"):
                     mod.n_jobs = n_jobs
-            mod.fit(X, Y)
-            self.models[counter] = mod
-            folder = "./" + model_name + "/"
-            if not os.path.exists(folder):
-                os.makedirs(folder)
-            joblib.dump(mod, open(folder + model_name + ".p", "wb"))
-            counter += 1
 
-    def evaluate(self, test_X, test_Y, idx_label_dic=None):
+            params = None
+            score = None
+
+            try:
+                if gridsearchcv:
+                    mod.fit(X, Y)
+                    score = np.mean(mod.best_score_)
+                    mod = mod.best_estimator_
+                    params = mod.get_params()
+                else:
+                    score = np.mean(model_selection.cross_val_score(mod, X, Y, scoring=scoring))
+                    mod.fit(X, Y)
+                    params = mod.get_params()
+            except:
+                pass
+
+            self.models[counter] = mod
+            counter += 1
+            result_df["model"].append(model_name)
+            result_df["parameters"].append(params)
+            result_df[cv_metric].append(score)
+        
+        result_df = pd.DataFrame(result_df)
+        result_df = result_df.sort_values(by=[cv_metric], ascending=False)
+
+        return result_df
+        
+
+    def evaluate(self, test_X: Union[tuple, list, np.ndarray], test_Y: Union[tuple, list, np.ndarray], idx_label_dic: dict=None, class_report: str="classf_report.csv", con_mat: str="confusion_matrix.csv", pred_proba: str="predictions_proba.csv"):
         """
         test_X: numpy array
             shape is (n_samples, n_features), test features
@@ -65,15 +104,24 @@ class MLTrainer:
             shape is (n_samples, 1), test labels
         idx_label_dic: dictionary
             keys are indices, values are string labels
+        class_report: str
+            file path to save classification report
+        con_mat: str
+            file path to save confusion matrix
+        pred_proba: str
+            file path to save csv containing prediction probabilities
         """
         if idx_label_dic is None:
-            idx_label_dic = {idx: str(idx) for idx in range(self.models[0].n_classes_)}
+            idx_label_dic = {idx: str(idx) for idx in range(self.n_classes)}
         self.idx_label_dic = idx_label_dic
         del idx_label_dic
         for model_name, model in zip(list(self.model_keys.keys()) ,self.models):
-            self.evaluate_model(model, test_X, test_Y, "./" + model_name + "/")
+            folder = "./" + model_name + "/"
+            if not os.path.exists(folder):
+                os.makedirs(folder)
+            self.evaluate_model(model, test_X, test_Y, folder, class_report=class_report, con_mat=con_mat, pred_proba=pred_proba)
 
-    def evaluate_model(self, model, test_X, test_Y, folder="", class_report="classf_report.csv", con_mat="confusion_matrix.csv", pred_proba="predictions_proba.csv"):
+    def evaluate_model(self, model, test_X: Union[tuple, list, np.ndarray], test_Y: Union[tuple, list, np.ndarray], folder: str="", class_report: str="classf_report.csv", con_mat: str="confusion_matrix.csv", pred_proba: str="predictions_proba.csv"):
         """
         model: Sklearn model object
         test_X: numpy array
@@ -91,15 +139,18 @@ class MLTrainer:
 
         Obtain evaluation metrics
         """
-        predictions = model.predict(test_X)
-        predictions_proba = model.predict_proba(test_X)
+        try:
+            predictions = model.predict(test_X)
+            predictions_proba = model.predict_proba(test_X)
+        except:
+            return
+        else:
+            self.classf_report(metrics.classification_report(test_Y, predictions, labels=list(self.idx_label_dic.keys())), folder+class_report) # Save sklearn classification report in csv
+            self.conf_mat(test_Y, predictions, folder+con_mat)
+            self.save_label_proba(predictions_proba, folder+pred_proba)
 
-        self.classf_report(metrics.classification_report(test_Y, predictions, labels=list(self.idx_label_dic.keys())), folder+class_report) # Save sklearn classification report in csv
-        self.conf_mat(test_Y, predictions, folder+con_mat)
-        self.save_label_proba(predictions_proba, folder+pred_proba)
 
-
-    def classf_report(self, report, file_path):
+    def classf_report(self, report, file_path: str):
         """
         report: sklearn classification report
         file_path: string
@@ -121,7 +172,7 @@ class MLTrainer:
         df = pd.DataFrame.from_dict(report_data)
         df.to_csv(file_path, index=False)
 
-    def conf_mat(self, test_Y, predictions, file_path):
+    def conf_mat(self, test_Y: Union[tuple, list, np.ndarray], predictions: Union[tuple, list, np.ndarray], file_path: str):
         """
         test_Y: numpy array
             shape is (n_samples, 1), true labels
@@ -143,7 +194,7 @@ class MLTrainer:
         confusion_mat_df["All"] = total_col
         confusion_mat_df.to_csv(file_path, index=False)
 
-    def save_label_proba(self, pred_proba, file_path):
+    def save_label_proba(self, pred_proba: np.ndarray, file_path: str):
         """
         pred_proba: numpy array
             shape is (n_samples, 1), predicted probabilities
