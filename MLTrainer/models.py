@@ -7,6 +7,8 @@ from typing import Union
 class MLTrainer:
     def __init__(self, ensemble: bool=True, linear: bool=True, naive_bayes: bool=True, neighbors: bool=True, svm: bool=True, decision_tree: bool=True, seed: int=100) -> None:
         """
+        PARAMS
+        ==========
         ensemble: bool
             True if want ensemble models
         linear: bool
@@ -23,20 +25,90 @@ class MLTrainer:
         """
         self.models = [] # list containing names of models, i.e. strings
         self.n_classes = None # Number of classes
+        self.fitted = False
         self.ensemble = ensemble
         self.linear = linear
         self.naive_bayes = naive_bayes
         self.neighbors = neighbors
         self.svm = svm
         self.decision_trees = decision_tree
-        self.model_keys = dict({})
+        self.seed = seed
+        self.cv_scores = dict()
+        self.model_keys = dict()
+        self.idx_label_dic = dict()
+        self.init_all_models()
+        
+    def init_ensemble(self) -> None:
+        all_models = [ensemble.AdaBoostClassifier(), ensemble.BaggingClassifier(), ensemble.ExtraTreesClassifier(),
+                        ensemble.GradientBoostingClassifier(), ensemble.RandomForestClassifier()]
+        self.models.extend(all_models)
+        models = ["adaboost", "bagging", "extratrees", "gradientboosting", 'randomforest']
+        for mod in models:
+            self.model_keys[mod] = "ensemble"
+        
+    def init_linear(self) -> None:
+        all_models = [linear_model.LogisticRegression()]
+        self.models.extend(all_models)
+        models = ["logreg"]
+        for mod in models:
+            self.model_keys[mod] = "linear"
 
-    def get_models_scores(self, X: Union[tuple, list, np.ndarray], Y: Union[tuple, list, np.ndarray], n_folds: int=5, scoring: str="accuracy", n_jobs: int=-1, gridsearchcv: bool=False, param_grids: dict={}) -> None:
+    def init_naive_bayes(self) -> None:
         """
+        MultinomialNB works with occurrence counts
+        BernoulliNB is designed for binary/boolean features
+        """
+        all_models = [naive_bayes.BernoulliNB(), naive_bayes.GaussianNB(), naive_bayes.MultinomialNB(), naive_bayes.ComplementNB()]
+        self.models.extend(all_models)
+        models = ["bernoulli", "gaussian", "multinomial", "complement"]
+        for mod in models:
+            self.model_keys[mod] = "nb"
+
+    def init_neighbors(self) -> None:
+        all_models = [neighbors.KNeighborsClassifier()]
+        self.models.extend(all_models)
+        models = ["knn"]
+        for mod in models:
+            self.model_keys[mod] = "neighbors"
+
+    def init_svm(self) -> None:
+        all_models = [svm.NuSVC(probability=True), svm.SVC(probability=True)]
+        self.models.extend(all_models)
+        models = ["nu", "svc"]
+        for mod in models:
+            self.model_keys[mod] = "svm"
+
+    def init_decision_tree(self) -> None:
+        all_models = [tree.DecisionTreeClassifier(), tree.ExtraTreeClassifier()]
+        self.models.extend(all_models)
+        models = ["decision", "extra"]
+        for mod in models:
+            self.model_keys[mod] = "tree"
+
+    def init_all_models(self) -> None:
+        if self.ensemble:
+            self.init_ensemble()
+        if self.linear:
+            self.init_linear()
+        if self.naive_bayes:
+            self.init_naive_bayes()
+        if self.neighbors:
+            self.init_neighbors()
+        if self.svm:
+            self.init_svm()
+        if self.decision_trees:
+            self.init_decision_tree()
+        if len(self.models) == 0:
+            raise Exception("No Models Selected, Look at the Parameters of ___init__")
+
+    def fit(self, X: Union[tuple, list, np.ndarray], Y: Union[tuple, list, np.ndarray], n_folds: int=5, scoring: str="accuracy", n_jobs: int=-1, gridsearchcv: bool=False, param_grids: dict={}, greater_is_better=True):
+        """
+        PARAMS
+        ==========
         X: numpy array
             shape is (n_samples, n_features)
         Y: numpy array
-            shape is (n_samples, 1)
+            shape is (n_samples,)
         n_folds: int
             number of cross validation folds
         njobs: int
@@ -47,13 +119,12 @@ class MLTrainer:
             True if want parameter search with gridsearch
         param_grids: nested dictionary
             contains several parameter grids
-        
-        Train all selected models with cross validation 
+        greater_is_better: bool
+            True if the evaluation metric is better when it is greater, the results dataframe will be sorted with ascending = not greater_is_better
         """
         self.n_classes = len(np.unique(Y))
-        self.init_all_models()
         cv_metric = "mean_cv_score_"+scoring
-        result_df = {"model": [], "parameters": [], cv_metric: []}
+        self.cv_scores = {"model": [], "parameters": [], cv_metric: []}
 
         if gridsearchcv:
             param_grids = classf_grids
@@ -67,6 +138,9 @@ class MLTrainer:
                 mod = model
                 if hasattr(mod, "n_jobs"):
                     mod.n_jobs = n_jobs
+                if hasattr(mod, "random_state"):
+                    mod.random_state = self.seed
+                mod.set_params(**param_grids.get(model_name, dict()))
 
             params = None
             score = None
@@ -74,13 +148,13 @@ class MLTrainer:
             try:
                 if gridsearchcv:
                     mod.fit(X, Y)
-                    score = np.mean(mod.best_score_)
+                    score = mod.best_score_
                     mod = mod.best_estimator_
-                    params = mod.get_params()
                 else:
-                    score = np.mean(model_selection.cross_val_score(mod, X, Y, scoring=scoring))
+                    score = np.mean(model_selection.cross_val_score(mod, X, Y, cv=n_folds, scoring=scoring))
                     mod.fit(X, Y)
-                    params = mod.get_params()
+                params = mod.get_params()
+
             except:
                 pass
 
@@ -90,13 +164,67 @@ class MLTrainer:
             result_df["parameters"].append(params)
             result_df[cv_metric].append(score)
         
-        result_df = pd.DataFrame(result_df)
-        result_df = result_df.sort_values(by=[cv_metric], ascending=False)
+        self.cv_scores = pd.DataFrame(result_df)
+        self.cv_scores = result_df.sort_values(by=[cv_metric], ascending=not greater_is_better)
+        self.fitted = True
 
-        return result_df
-        
+        return self
 
-    def evaluate(self, test_X: Union[tuple, list, np.ndarray], test_Y: Union[tuple, list, np.ndarray], idx_label_dic: dict=None, class_report: str="classf_report.csv", con_mat: str="confusion_matrix.csv", pred_proba: str="predictions_proba.csv"):
+    def predict(self, X: Union[tuple, list, np.ndarray]) -> dict:
+        """
+        PARAMS
+        ==========
+        X: numpy array
+            shape is (n_samples, n_features)
+
+        RETURNS
+        ==========
+        test_Y: numpy array
+            shape is (n_samples,)
+        """
+        assert self.fitted == True, "Call .fit() method first"
+        result = dict()
+        model_names = list(self.model_keys.keys())
+
+        for idx, model in enumerate(self.models):
+            model_name = model_names[idx]
+            try:
+                predictions = model.predict(X)
+            except Exception as e:
+                predictions = e
+
+            result[model_name] = predictions
+
+        return result
+
+    def predict_proba(self, X: Union[tuple, list, np.ndarray]) -> dict:
+        """
+        PARAMS
+        ==========
+        X: numpy array
+            shape is (n_samples, n_features)
+
+        RETURNS
+        ==========
+        test_Y: numpy array
+            shape is (n_samples,)
+        """
+        assert self.fitted == True, "Call .fit() method first"
+        result = dict()
+        model_names = list(self.model_keys.keys())
+
+        for idx, model in enumerate(self.models):
+            model_name = model_names[idx]
+            try:
+                proba = model.predict_proba(X)
+            except Exception as e:
+                proba = e
+
+            result[model_name] = proba
+
+        return result
+
+    def evaluate(self, test_X: Union[tuple, list, np.ndarray], test_Y: Union[tuple, list, np.ndarray], idx_label_dic: dict=None, class_report: str="classf_report.csv", con_mat: str="confusion_matrix.csv", pred_proba: str="predictions_proba.csv") -> None:
         """
         test_X: numpy array
             shape is (n_samples, n_features), test features
@@ -121,7 +249,7 @@ class MLTrainer:
                 os.makedirs(folder)
             self.evaluate_model(model, test_X, test_Y, folder, class_report=class_report, con_mat=con_mat, pred_proba=pred_proba)
 
-    def evaluate_model(self, model, test_X: Union[tuple, list, np.ndarray], test_Y: Union[tuple, list, np.ndarray], folder: str="", class_report: str="classf_report.csv", con_mat: str="confusion_matrix.csv", pred_proba: str="predictions_proba.csv"):
+    def evaluate_model(self, model, test_X: Union[tuple, list, np.ndarray], test_Y: Union[tuple, list, np.ndarray], folder: str="", class_report: str="classf_report.csv", con_mat: str="confusion_matrix.csv", pred_proba: str="predictions_proba.csv") -> None:
         """
         model: Sklearn model object
         test_X: numpy array
@@ -205,66 +333,3 @@ class MLTrainer:
         for idx, label in self.idx_label_dic.items():
             proba_df[label] = pred_proba[:, idx]
         proba_df.to_csv(file_path, index=False)
-
-    def init_all_models(self):
-        if self.ensemble:
-            self.init_ensemble()
-        if self.linear:
-            self.init_linear()
-        if self.naive_bayes:
-            self.init_naive_bayes()
-        if self.neighbors:
-            self.init_neighbors()
-        if self.svm:
-            self.init_svm()
-        if self.decision_trees:
-            self.init_decision_tree()
-        if len(self.models) == 0:
-            raise Exception("No Models Selected, Look at the Parameters of ___init__")
-        
-    def init_ensemble(self):
-        all_models = [ensemble.AdaBoostClassifier(), ensemble.BaggingClassifier(), ensemble.ExtraTreesClassifier(),
-                        ensemble.GradientBoostingClassifier(), ensemble.RandomForestClassifier()]
-        self.models.extend(all_models)
-        models = ["adaboost", "bagging", "extratrees", "gradientboosting", 'randomforest']
-        for mod in models:
-            self.model_keys[mod] = "ensemble"
-        
-    def init_linear(self):
-        all_models = [linear_model.LogisticRegression()]
-        self.models.extend(all_models)
-        models = ["logreg"]
-        for mod in models:
-            self.model_keys[mod] = "linear"
-
-    def init_naive_bayes(self):
-        """
-        MultinomialNB works with occurrence counts
-        BernoulliNB is designed for binary/boolean features
-        """
-        all_models = [naive_bayes.BernoulliNB(), naive_bayes.GaussianNB(), naive_bayes.MultinomialNB(), naive_bayes.ComplementNB()]
-        self.models.extend(all_models)
-        models = ["bernoulli", "gaussian", "multinomial", "complement"]
-        for mod in models:
-            self.model_keys[mod] = "nb"
-
-    def init_neighbors(self):
-        all_models = [neighbors.KNeighborsClassifier()]
-        self.models.extend(all_models)
-        models = ["knn"]
-        for mod in models:
-            self.model_keys[mod] = "neighbors"
-
-    def init_svm(self):
-        all_models = [svm.NuSVC(probability=True), svm.SVC(probability=True)]
-        self.models.extend(all_models)
-        models = ["nu", "svc"]
-        for mod in models:
-            self.model_keys[mod] = "svm"
-
-    def init_decision_tree(self):
-        all_models = [tree.DecisionTreeClassifier(), tree.ExtraTreeClassifier()]
-        self.models.extend(all_models)
-        models = ["decision", "extra"]
-        for mod in models:
-            self.model_keys[mod] = "tree"
