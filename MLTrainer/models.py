@@ -101,7 +101,7 @@ class MLTrainer:
         if len(self.models) == 0:
             raise Exception("No Models Selected, Look at the Parameters of ___init__")
 
-    def fit(self, X: Union[tuple, list, np.ndarray], Y: Union[tuple, list, np.ndarray], n_folds: int=5, scoring: str="accuracy", n_jobs: int=-1, gridsearchcv: bool=False, param_grids: dict={}, greater_is_better=True):
+    def fit(self, X: Union[tuple, list, np.ndarray], Y: Union[tuple, list, np.ndarray], n_folds: int=5, scoring: str="accuracy", n_jobs: int=-1, gridsearchcv: bool=False, param_grids: dict={}, greater_is_better: bool=True):
         """
         PARAMS
         ==========
@@ -123,8 +123,8 @@ class MLTrainer:
             True if the evaluation metric is better when it is greater, the results dataframe will be sorted with ascending = not greater_is_better
         """
         self.n_classes = len(np.unique(Y))
-        cv_metric = "mean_cv_score_"+scoring
-        self.cv_scores = {"model": [], "parameters": [], cv_metric: []}
+        cv_metric = "mean_cv_"+scoring
+        self.cv_scores = {"model": [], "parameters": [], cv_metric: [], "remarks": []}
 
         if gridsearchcv:
             param_grids = classf_grids
@@ -144,6 +144,7 @@ class MLTrainer:
 
             params = None
             score = None
+            remark = ""
 
             try:
                 if gridsearchcv:
@@ -155,17 +156,17 @@ class MLTrainer:
                     mod.fit(X, Y)
                 params = mod.get_params()
 
-            except:
-                pass
+            except Exception as e:
+                remark = e
 
             self.models[counter] = mod
             counter += 1
-            result_df["model"].append(model_name)
-            result_df["parameters"].append(params)
-            result_df[cv_metric].append(score)
+            self.cv_scores["model"].append(model_name)
+            self.cv_scores["parameters"].append(params)
+            self.cv_scores["remarks"].append(remark)
+            self.cv_scores[cv_metric].append(score)
         
-        self.cv_scores = pd.DataFrame(result_df)
-        self.cv_scores = result_df.sort_values(by=[cv_metric], ascending=not greater_is_better)
+        self.cv_scores = pd.DataFrame(self.cv_scores)
         self.fitted = True
 
         return self
@@ -226,6 +227,8 @@ class MLTrainer:
 
     def evaluate(self, test_X: Union[tuple, list, np.ndarray], test_Y: Union[tuple, list, np.ndarray], idx_label_dic: dict=None, class_report: str="classf_report.csv", con_mat: str="confusion_matrix.csv", pred_proba: str="predictions_proba.csv") -> None:
         """
+        PARAMS
+        ==========
         test_X: numpy array
             shape is (n_samples, n_features), test features
         test_Y: numpy array
@@ -238,6 +241,10 @@ class MLTrainer:
             file path to save confusion matrix
         pred_proba: str
             file path to save csv containing prediction probabilities
+
+        RETURNS
+        ==========
+        Saves classification report, confusion matrix and label probabilities in CSV
         """
         assert self.fitted == True, "Call .fit() method first"
         if idx_label_dic is None:
@@ -252,6 +259,8 @@ class MLTrainer:
 
     def evaluate_model(self, model, test_X: Union[tuple, list, np.ndarray], test_Y: Union[tuple, list, np.ndarray], folder: str="", class_report: str="classf_report.csv", con_mat: str="confusion_matrix.csv", pred_proba: str="predictions_proba.csv") -> None:
         """
+        PARAMS
+        ==========
         model: Sklearn model object
         test_X: numpy array
             shape is (n_samples, n_features), test features
@@ -266,7 +275,9 @@ class MLTrainer:
         pred_proba: string
             path to save predicted probabilities
 
-        Obtain evaluation metrics
+        RETURNS
+        ==========
+        Saves classification report, confusion matrix and label probabilities in CSV
         """
         try:
             predictions = model.predict(test_X)
@@ -274,17 +285,22 @@ class MLTrainer:
         except:
             return
         else:
-            self.classf_report(metrics.classification_report(test_Y, predictions, labels=list(self.idx_label_dic.keys())), folder+class_report) # Save sklearn classification report in csv
-            self.conf_mat(test_Y, predictions, folder+con_mat)
+            self.save_classf_report(metrics.classification_report(test_Y, predictions, labels=list(self.idx_label_dic.keys())), folder+class_report) # Save sklearn classification report in csv
+            self.save_conf_mat(test_Y, predictions, folder+con_mat)
             self.save_label_proba(predictions_proba, folder+pred_proba)
 
 
-    def classf_report(self, report, file_path: str):
+    def save_classf_report(self, report, file_path: str):
         """
+        PARAMS
+        ==========
         report: sklearn classification report
         file_path: string
             path to save classification report as csv
-        Saves classification report
+
+        RETURNS
+        ==========
+        Saves classification report in CSV
         """
         report_data = []
         lines = report.split('\n')
@@ -301,15 +317,20 @@ class MLTrainer:
         df = pd.DataFrame.from_dict(report_data)
         df.to_csv(file_path, index=False)
 
-    def conf_mat(self, test_Y: Union[tuple, list, np.ndarray], predictions: Union[tuple, list, np.ndarray], file_path: str):
+    def save_conf_mat(self, test_Y: Union[tuple, list, np.ndarray], predictions: Union[tuple, list, np.ndarray], file_path: str):
         """
+        PARAMS
+        ==========
         test_Y: numpy array
             shape is (n_samples, 1), true labels
         predictions: numpy array
             shape is (n_samples, 1), predicted labels
         file_path: string
             path to save confusion matrix
-        Saves confusion matrix
+        
+        RETURNS
+        ==========
+        Saves confusion matrix in CSV
         """
         confusion_mat = metrics.confusion_matrix(test_Y, predictions, labels=list(self.idx_label_dic.keys()))
         total_row = confusion_mat.sum(axis=0)
@@ -325,10 +346,16 @@ class MLTrainer:
 
     def save_label_proba(self, pred_proba: np.ndarray, file_path: str):
         """
+        PARAMS
+        ==========
         pred_proba: numpy array
             shape is (n_samples, 1), predicted probabilities
         file_path: string
             file path to save label probabilities in CSV
+
+        RETURNS
+        ==========
+        Saves label probabilities in CSV
         """
         proba_df = pd.DataFrame({})
         for idx, label in self.idx_label_dic.items():
