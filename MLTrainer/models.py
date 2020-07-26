@@ -239,6 +239,7 @@ class MLTrainer:
         pred_proba: str
             file path to save csv containing prediction probabilities
         """
+        assert self.fitted == True, "Call .fit() method first"
         if idx_label_dic is None:
             idx_label_dic = {idx: str(idx) for idx in range(self.n_classes)}
         self.idx_label_dic = idx_label_dic
