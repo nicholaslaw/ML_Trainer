@@ -8,9 +8,10 @@ setup(
    author_email='nicholas_law_91@hotmail.com',
    packages=['MLTrainer'],  #same as name
    install_requires=[
-       "numpy==1.17.2",
-       "scikit-learn==0.20.3",
-       "pandas==0.25.1",
-       "joblib==0.13.0"
+       "numpy==1.18.1",
+       "scikit-learn==0.22.2.post1",
+       "pandas==1.0.1",
+       "joblib==0.14.1",
+       "matplotlib==3.3.0"
    ], #external packages as dependencies
 )
