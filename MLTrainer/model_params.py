@@ -1,13 +1,3 @@
-def func(grid):
-    result = dict()
-    for key, val in grid.items():
-        the = dict()
-        for i, j in val.items():
-            j = j[:1]
-            the[i] = j
-        result[key] = the
-    return result
-
 # Parameter Grids
 ## NOTE: Define grids for GridSearchCV
 ensemble_grids = {
@@ -115,10 +105,32 @@ tree_grids = {
 }
 
 classf_grids = {
-    "ensemble": func(ensemble_grids),
-    "linear": func(linear_grids),
-    "nb": func(nb_grids),
-    "neighbors": func(neighbors_grids),
-    "svm": func(svm_grids),
-    "tree": func(tree_grids)
+    "ensemble": ensemble_grids,
+    "linear": linear_grids,
+    "nb": nb_grids,
+    "neighbors": neighbors_grids,
+    "svm": svm_grids,
+    "tree": tree_grids
 }
+
+def extract_test_params(grid):
+    """
+    PARAMS
+    ==========
+    grid: dict
+        keys are model names given by myself and values are 
+        dictionaries containing model parameters used by scikit learn models
+
+    RETURNS
+    ==========
+    For each parameter list contained in a dictionary for a model, this function returns
+    a dictionary containing parameters as keys and values are a list containing just 1 value each
+    """
+    result = dict()
+    for key, val in grid.items():
+        the = dict()
+        for i, j in val.items():
+            j = j[:1]
+            the[i] = j
+        result[key] = the
+    return result
