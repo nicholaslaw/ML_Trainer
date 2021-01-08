@@ -28,7 +28,19 @@ ensemble_grids = {
         "criterion": ["gini", "entropy"],
         "max_features": ["auto", "sqrt", "log2", None],
         "class_weight": ["balanced", "balanced_subsample"]
-    }
+    },
+    "xgboost": {
+        'min_child_weight': list(range(1,10,2)),
+        'gamma':[i/10.0 for i in range(0,5)],
+        'subsample': [0.6, 0.8, 1.0],
+        'colsample_bytree':[i/10.0 for i in range(6,10)],
+        'max_depth':range(3,10,2),
+        'reg_alpha': [0, 0.001, 0.005, 0.01, 0.05, 0.1, 0.2],
+        'reg_lambda': [0, 0.001, 0.005, 0.01, 0.05, 0.2, 0.4, 0.6, 0.8, 1],
+        'learning_rate': [0.001, 0.002, 0.005, 0.006, 0.01, 0.02, 0.05, 0.1, 0.11, 0.12, 0.13, 0.14, 0.15, 0.2],
+        'n_estimators': [50, 100, 150, 200, 250, 300,350,400,450,500, 550, 600, 650, 700, 750],
+        "booster": ["gbtree", "gblinear", "dart"]
+        }
 }
 
 linear_grids = {

@@ -1,4 +1,5 @@
 from sklearn import ensemble, linear_model, naive_bayes, neighbors, svm, tree, model_selection, metrics
+from xgboost import XGBClassifier
 import numpy as np, pandas as pd, logging, os, joblib
 from .model_params import classf_grids
 import warnings
@@ -40,9 +41,9 @@ class MLTrainer:
         
     def init_ensemble(self) -> None:
         all_models = [ensemble.AdaBoostClassifier(), ensemble.BaggingClassifier(), ensemble.ExtraTreesClassifier(),
-                        ensemble.GradientBoostingClassifier(), ensemble.RandomForestClassifier()]
+                        ensemble.GradientBoostingClassifier(), ensemble.RandomForestClassifier(), XGBClassifier()]
         self.models.extend(all_models)
-        models = ["adaboost", "bagging", "extratrees", "gradientboosting", 'randomforest']
+        models = ["adaboost", "bagging", "extratrees", "gradientboosting", 'randomforest', "xgboost"]
         for mod in models:
             self.model_keys[mod] = "ensemble"
         
