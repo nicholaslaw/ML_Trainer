@@ -8,7 +8,7 @@ setup(
    author_email='nicholas_law_91@hotmail.com',
    packages=['MLTrainer'],
    install_requires=[
-       "numpy==1.18.1",
+       "numpy==1.22.0",
        "scikit-learn==0.22.2.post1",
        "pandas==1.0.1",
        "joblib==0.14.1",
